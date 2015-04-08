@@ -23,11 +23,37 @@
 extern crate kernel32;
 extern crate winapi;
 
+use winapi::HANDLE;
+use std::ffi::CString;
+use std::ptr;
+
+pub struct Connection {
+	// Pointer to the serial connection
+	com_handle: HANDLE
+}
+
+impl Connection {
+	pub fn new<T: Into<Vec<u8>>>(port: T, baud_rate: u32) -> Result<Connection, &'static str> {
+		let com_handle = unsafe {
+			kernel32::CreateFileA(CString::new(port).unwrap().as_ptr(),
+				winapi::GENERIC_READ | winapi::GENERIC_WRITE,
+				0,
+				ptr::null_mut(),
+				winapi::OPEN_EXISTING,
+				winapi::FILE_FLAG_OVERLAPPED,
+				ptr::null_mut())
+		};
+
+		if com_handle == winapi::INVALID_HANDLE_VALUE {
+			Err("Invalid COM port handle. Port might be in busy")
+		} else {
+			Ok(Connection{ com_handle: com_handle })
+		}
+	}
+}
+
 #[test]
 fn test() {
-	use std::ffi::CString;
-	use std::ptr;
-
 	let com_handle = unsafe { kernel32::CreateFileA(CString::new("COM8").unwrap().as_ptr(),
 		winapi::GENERIC_READ | winapi::GENERIC_WRITE,
 		0,
