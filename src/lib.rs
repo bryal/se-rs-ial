@@ -69,7 +69,7 @@ impl Connection {
 			let mut conn = Connection{ comm_handle: comm_handle };
 			match conn.set_baud_rate(baud_rate) {
 				Ok(_) => Ok(conn),
-				Err(e) => Err(Error::new(ErrorKind::Other, "Error setting baud rate")),
+				Err(_) => Err(Error::new(ErrorKind::Other, "Error setting baud rate")),
 			}
 		}
 	}
@@ -116,6 +116,38 @@ impl io::Read for Connection {
 				_ => Error::new(ErrorKind::Other, format!("Read failed with 0x{:x}", err))
 			})
 		}
+	}
+}
+impl io::Write for Connection {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		let mut n_bytes_written = 0;
+
+		let (succeded, err) = unsafe { (
+			kernel32::WriteFile(self.comm_handle,
+				mem::transmute(buf.as_ptr()),
+				buf.len() as u32,
+				&mut n_bytes_written,
+				ptr::null_mut()) > 0,
+			kernel32::GetLastError()
+		) };
+
+		if succeded {
+			Ok(n_bytes_written as usize)
+		} else {
+			Err(match err {
+				winapi::ERROR_INVALID_USER_BUFFER =>
+					Error::new(ErrorKind::InvalidInput, "Supplied buffer is invalid"),
+				winapi::ERROR_NOT_ENOUGH_MEMORY =>
+					Error::new(ErrorKind::Other, "Too many I/O requests"),
+				winapi::ERROR_OPERATION_ABORTED =>
+					Error::new(ErrorKind::Interrupted, "Operation was canceled"),
+				_ => Error::new(ErrorKind::Other, format!("Write failed with 0x{:x}", err))
+			})
+		}
+	}
+
+	fn flush(&mut self) -> io::Result<()> {
+		Ok(())
 	}
 }
 
