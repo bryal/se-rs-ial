@@ -1,0 +1,9 @@
+[package]
+name = "se_rs_ial"
+version = "0.0.1"
+authors = ["bryal <96.bryal@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+winapi = "*"
+kernel32-sys = "*"
