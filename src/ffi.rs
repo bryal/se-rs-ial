@@ -71,6 +71,6 @@ pub struct DCB {
 
 #[link(name = "kernel32")]
 extern "system" {
-	pub fn GetComState(file_handle: HANDLE, dcb: *mut DCB) -> BOOL;
+	pub fn GetCommState(file_handle: HANDLE, dcb: *mut DCB) -> BOOL;
 	pub fn SetCommState(file_handle: HANDLE, dcb: *mut DCB) -> BOOL;
 }

@@ -29,7 +29,7 @@ pub use ffi::*;
 
 use libc::funcs::extra::kernel32;
 use winapi::HANDLE;
-use std::ptr;
+use std::{ ptr, mem };
 
 mod ffi;
 
@@ -39,7 +39,7 @@ pub struct Connection {
 }
 
 impl Connection {
-	pub fn new(port: &str) -> Result<Connection, &'static str> {
+	pub fn new(port: &str, baud_rate: u32) -> Result<Connection, &'static str> {
 		let (com_handle, cf_result) = unsafe {
 			let mut port_u16: Vec<_> = port.utf16_units().collect();
 			port_u16.push(0);
@@ -62,14 +62,32 @@ impl Connection {
 				_ => Err("Invalid COM port handle")
 			}
 		} else {
-			Ok(Connection{ com_handle: com_handle })
+			let mut conn = Connection{ com_handle: com_handle };
+			match conn.set_baud_rate(baud_rate) {
+				Ok(_) => Ok(conn),
+				Err(_) => Err("Error setting baud rate"),
+			}
+		}
+	}
+
+	pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), ()> {
+		unsafe {
+			let mut dcb = mem::zeroed();
+			if GetCommState(self.com_handle, &mut dcb) == 0 {
+				Err(())
+			} else {
+				dcb.BaudRate = baud_rate;
+				if SetCommState(self.com_handle, &mut dcb) == 0 {
+					Err(())
+				} else {
+					Ok(())
+				}
+			}
 		}
 	}
 }
 
 #[test]
 fn test() {
-	let con = Connection::new("COM8").unwrap();
-
-
+	let con = Connection::new("COM8", 9600).unwrap();
 }
