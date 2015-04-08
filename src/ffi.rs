@@ -20,56 +20,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#![feature(collections)]
+#![allow(non_snake_case, non_camel_case_types, dead_code)]
 
-extern crate libc;
-extern crate winapi;
+use libc::c_char;
+use winapi::{ DWORD, HANDLE, BOOL, WORD, BYTE };
 
-pub use ffi::*;
-
-use libc::funcs::extra::kernel32;
-use winapi::HANDLE;
-use std::ptr;
-
-mod ffi;
-
-pub struct Connection {
-	// Pointer to the serial connection
-	com_handle: HANDLE
+#[repr(C)]
+pub struct i2 {
+	lo: bool,
+	hi: bool,
 }
 
-impl Connection {
-	pub fn new(port: &str) -> Result<Connection, &'static str> {
-		let (com_handle, cf_result) = unsafe {
-			let mut port_u16: Vec<_> = port.utf16_units().collect();
-			port_u16.push(0);
-			(
-				kernel32::CreateFileW(port_u16.as_ptr(),
-					winapi::GENERIC_READ | winapi::GENERIC_WRITE,
-					0,
-					ptr::null_mut(),
-					winapi::OPEN_EXISTING,
-					winapi::FILE_FLAG_OVERLAPPED,
-					ptr::null_mut()),
-				kernel32::GetLastError()
-			)
-		};
-
-		if com_handle == winapi::INVALID_HANDLE_VALUE {
-			match cf_result {
-				winapi::ERROR_ACCESS_DENIED => Err("Access denied, port might be busy"),
-				winapi::ERROR_FILE_NOT_FOUND => Err("COM port does not exist"),
-				_ => Err("Invalid COM port handle")
-			}
-		} else {
-			Ok(Connection{ com_handle: com_handle })
-		}
-	}
+#[repr(C)]
+pub struct i17 {
+	a: i16,
+	b: bool,
 }
 
-#[test]
-fn test() {
-	let con = Connection::new("COM8").unwrap();
+#[repr(C)]
+pub struct DCB {
+	pub DCBlength: DWORD,
+	pub BaudRate: DWORD,
+	pub fBinary: bool,
+	pub fParity: bool,
+	pub fOutxCtsFlow: bool,
+	pub fOutxDsrFlow: bool,
+	pub fDtrControl: i2,
+	pub fDsrSensitivity: bool,
+	pub fTXContinueOnXoff: bool,
+	pub fOutX: bool,
+	pub fInX: bool,
+	pub fErrorChar: bool,
+	pub fNull: bool,
+	pub fRtsControl: i2,
+	pub fAbortOnError: bool,
+	pub fDummy2: i17,
+	pub wReserved: WORD,
+	pub XonLim: WORD,
+	pub XoffLim: WORD,
+	pub ByteSize: BYTE,
+	pub Parity: BYTE,
+	pub StopBits: BYTE,
+	pub XonChar: c_char,
+	pub XoffChar: c_char,
+	pub ErrorChar: c_char,
+	pub EofChar: c_char,
+	pub EvtChar: c_char,
+	pub wReserved1: WORD,
+}
 
-
+#[link(name = "kernel32")]
+extern "system" {
+	pub fn GetComState(file_handle: HANDLE, dcb: *mut DCB) -> BOOL;
+	pub fn SetCommState(file_handle: HANDLE, dcb: *mut DCB) -> BOOL;
 }
