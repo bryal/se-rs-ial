@@ -6,4 +6,4 @@ license = "MIT"
 
 [dependencies]
 winapi = "*"
-kernel32-sys = "*"
+libc = "*"

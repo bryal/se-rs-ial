@@ -20,9 +20,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-extern crate kernel32;
+#![feature(collections)]
+
+extern crate libc;
 extern crate winapi;
 
+use libc::funcs::extra::kernel32;
 use winapi::HANDLE;
 use std::ffi::CString;
 use std::ptr;
@@ -33,19 +36,28 @@ pub struct Connection {
 }
 
 impl Connection {
-	pub fn new<T: Into<Vec<u8>>>(port: T, baud_rate: u32) -> Result<Connection, &'static str> {
-		let com_handle = unsafe {
-			kernel32::CreateFileA(CString::new(port).unwrap().as_ptr(),
-				winapi::GENERIC_READ | winapi::GENERIC_WRITE,
-				0,
-				ptr::null_mut(),
-				winapi::OPEN_EXISTING,
-				winapi::FILE_FLAG_OVERLAPPED,
-				ptr::null_mut())
+	pub fn new(port: &str) -> Result<Connection, &'static str> {
+		let (com_handle, cf_result) = unsafe {
+			let mut port_u16: Vec<_> = port.utf16_units().collect();
+			port_u16.push(0);
+			(
+				kernel32::CreateFileW(port_u16.as_ptr(),
+					winapi::GENERIC_READ | winapi::GENERIC_WRITE,
+					0,
+					ptr::null_mut(),
+					winapi::OPEN_EXISTING,
+					winapi::FILE_FLAG_OVERLAPPED,
+					ptr::null_mut()),
+				kernel32::GetLastError()
+			)
 		};
 
 		if com_handle == winapi::INVALID_HANDLE_VALUE {
-			Err("Invalid COM port handle. Port might be in busy")
+			match cf_result {
+				winapi::ERROR_ACCESS_DENIED => Err("Access denied, port might be busy"),
+				winapi::ERROR_FILE_NOT_FOUND => Err("COM port does not exist"),
+				_ => Err("Invalid COM port handle")
+			}
 		} else {
 			Ok(Connection{ com_handle: com_handle })
 		}
@@ -54,13 +66,5 @@ impl Connection {
 
 #[test]
 fn test() {
-	let com_handle = unsafe { kernel32::CreateFileA(CString::new("COM8").unwrap().as_ptr(),
-		winapi::GENERIC_READ | winapi::GENERIC_WRITE,
-		0,
-		ptr::null_mut(),
-		winapi::OPEN_EXISTING,
-		winapi::FILE_FLAG_OVERLAPPED,
-		ptr::null_mut()) };
-
-	assert!(com_handle != winapi::INVALID_HANDLE_VALUE);
+	let con = Connection::new("COM8").unwrap();
 }
