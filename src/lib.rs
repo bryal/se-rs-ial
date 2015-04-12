@@ -22,6 +22,8 @@
 
 #![feature(collections, step_by)]
 
+#[macro_use]
+extern crate bitflags;
 extern crate libc;
 extern crate winapi;
 
@@ -29,11 +31,33 @@ pub use ffi::*;
 
 use libc::funcs::extra::kernel32;
 use libc::c_void;
-use winapi::HANDLE;
+use winapi::{ HANDLE, DWORD };
 use std::{ ptr, mem, io };
-use std::io::{Error, ErrorKind};
+use std::io::{ Error, ErrorKind };
 
 mod ffi;
+
+pub struct CommEventWaiter<'a> {
+	comm_handle: &'a mut c_void
+}
+
+impl<'a> CommEventWaiter<'a> {
+	pub fn wait_for_event(&self) -> Result<CommEventFlags, DWORD> {
+		let mut events = CommEventFlags::empty();
+		let (succeded, err) = unsafe { (
+			WaitCommEvent(self.comm_handle, &mut events, ptr::null_mut()) != 0,
+			kernel32::GetLastError()
+		) };
+
+		if succeded {
+			Ok(events)
+		} else {
+			Err(err)
+		}
+	}
+}
+
+unsafe impl<'a> Send for CommEventWaiter<'a> { }
 
 pub struct Connection {
 	// Pointer to the serial connection
@@ -51,7 +75,7 @@ impl Connection {
 					0,
 					ptr::null_mut(),
 					winapi::OPEN_EXISTING,
-					0,
+					libc::FILE_ATTRIBUTE_NORMAL,
 					ptr::null_mut()),
 				kernel32::GetLastError()
 			)
@@ -67,33 +91,107 @@ impl Connection {
 			})
 		} else {
 			let mut conn = Connection{ comm_handle: comm_handle };
-			match conn.set_baud_rate(baud_rate) {
-				Ok(_) => Ok(conn),
-				Err(_) => Err(Error::new(ErrorKind::Other, "Error setting baud rate")),
+			let mut dcb = match conn.get_comm_state() {
+				Ok(dcb) => dcb,
+				Err(_) => return Err(Error::new(ErrorKind::Other, "Error getting comm state"))
+			};
+
+			dcb.BaudRate = baud_rate;
+			dcb.ByteSize = 8;
+			dcb.StopBits = ONESTOPBIT;
+			dcb.Parity = NOPARITY;
+			dcb.set_dtr_control(DTR_CONTROL::ENABLE);
+			if let Err(_) = conn.set_comm_state(dcb) {
+				return Err(Error::new(ErrorKind::Other, "Error setting comm state"))
+			} else {
+				conn.set_timeout(40).unwrap();
+				unsafe { PurgeComm(conn.comm_handle, PURGE_RXCLEAR | PURGE_TXCLEAR); }
+				Ok(conn)
 			}
 		}
 	}
 
-	pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), ()> {
+	fn get_comm_state(&mut self) -> Result<DCB, ()> {
 		unsafe {
 			let mut dcb = mem::zeroed();
-			if GetCommState(self.comm_handle, &mut dcb) <= 0 {
+			if GetCommState(self.comm_handle, &mut dcb) == 0 {
 				Err(())
 			} else {
-				dcb.BaudRate = baud_rate;
-				if SetCommState(self.comm_handle, &mut dcb) <= 0 {
-					Err(())
-				} else {
-					Ok(())
-				}
+				Ok(dcb)
 			}
 		}
 	}
+
+	fn set_comm_state(&mut self, mut dcb: DCB) -> Result<(), ()> {
+		if unsafe { SetCommState(self.comm_handle, &mut dcb) } == 0 {
+			Err(())
+		} else {
+			Ok(())
+		}
+	}
+
+	pub fn comm_event_waiter<'a>(&self) -> CommEventWaiter<'a> {
+		CommEventWaiter{ comm_handle: unsafe { mem::transmute(self.comm_handle) } }
+	}
+
+	pub fn set_timeout(&mut self, timeout_ms: u32) -> Result<(), ()> {
+		unsafe {
+			if SetCommTimeouts(self.comm_handle, &mut COMMTIMEOUTS{
+				ReadIntervalTimeout: timeout_ms,
+				ReadTotalTimeoutMultiplier: timeout_ms,
+				ReadTotalTimeoutConstant: timeout_ms,
+				WriteTotalTimeoutMultiplier: timeout_ms,
+				WriteTotalTimeoutConstant: timeout_ms,
+			}) != 0
+			{
+				Ok(())
+			} else {
+				Err(())
+			}
+		}
+	}
+
+	// Read into `buf` until `delim` is encountered. Returns n.o. bytes read.
+	// If `delim` is never found, truncate `buf` to original size and return 0.
+	pub fn read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
+		use std::io::Read;
+
+		let mut byte = [0_u8];
+		loop {
+			match self.read(&mut byte) {
+				Err(e) => return Err(e),
+				Ok(0) => { println!("read 0 bytes"); break },
+				Ok(_) => (),
+			};
+
+			let buf_len = buf.len();
+			if byte[0] == delim {
+				return Ok(buf_len);
+			}
+
+			if buf_len == buf.capacity() {
+				buf.reserve(buf_len);
+			}
+			buf.push(byte[0])
+		}
+
+		// Delimiter was not found before end of stream or timeout
+		Err(Error::new(ErrorKind::Other, "Delimiter was not found"))
+	}
+
+	// Read until newline. Return n.o. bytes read
+	pub fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+		self.read_until('\n' as u8, buf)
+	}
 }
+
 impl io::Read for Connection {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		let mut n_bytes_read = 0;
+		if buf.len() == 0 {
+			return Ok(0)
+		}
 
+		let mut n_bytes_read = 0;
 		let (succeded, err) = unsafe { (
 			kernel32::ReadFile(self.comm_handle,
 				buf.as_mut_ptr() as *mut c_void,
@@ -104,7 +202,11 @@ impl io::Read for Connection {
 		) };
 
 		if succeded {
-			Ok(n_bytes_read as usize)
+			if n_bytes_read == 0 {
+				Err(Error::new(ErrorKind::TimedOut, "Operation timed out"))
+			} else {
+				Ok(n_bytes_read as usize)
+			}
 		} else {
 			Err(match err {
 				winapi::ERROR_INVALID_USER_BUFFER =>
@@ -118,6 +220,7 @@ impl io::Read for Connection {
 		}
 	}
 }
+
 impl io::Write for Connection {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let mut n_bytes_written = 0;
@@ -127,7 +230,7 @@ impl io::Write for Connection {
 				mem::transmute(buf.as_ptr()),
 				buf.len() as u32,
 				&mut n_bytes_written,
-				ptr::null_mut()) > 0,
+				ptr::null_mut()) != 0,
 			kernel32::GetLastError()
 		) };
 
@@ -150,6 +253,7 @@ impl io::Write for Connection {
 		Ok(())
 	}
 }
+
 impl Drop for Connection {
 	fn drop(&mut self) {
 		let e = unsafe { kernel32::CloseHandle(self.comm_handle) };
@@ -158,7 +262,36 @@ impl Drop for Connection {
 		}
 	}
 }
+
 unsafe impl Send for Connection { }
+
+// Some tests requires correct code to be running on connected serial device
+
+// // Should work with any simple echo code on the arduino
+// #[test]
+// fn echo_test() {
+// 	use std::io::Write;
+// 	use std::thread;
+
+// 	let port = "COM8";
+// 	let baud_rate = 9600_u32;
+// 	let mut connection = Connection::new(port, baud_rate).unwrap();
+// 	thread::sleep_ms(2000);
+
+// 	for i in 0..20 {
+// 		let test_str = format!("One two {}\n", i);
+
+// 		let n_bytes_written = connection.write(test_str.as_bytes());
+
+// 		let mut buffer = Vec::with_capacity(20);
+
+// 		let n_bytes_read = connection.read_line(&mut buffer);
+// 		let read_string = String::from_utf8(buffer).unwrap();
+
+// 		println!("Bytes written: {:?}, Bytes read: {:?}, String read: {}",
+// 			n_bytes_written, n_bytes_read, read_string);
+// 	}
+// }
 
 // Colorswirl. Works with arduino running LEDstream
 #[test]
@@ -169,6 +302,8 @@ fn colorswirl_test() {
 	let port = "COM8";
 	let baud_rate = 115_200;
 	let mut connection = Connection::new(port, baud_rate).unwrap();
+
+	thread::sleep_ms(2000);
 
 	let n_leds = 32;
 	let pixel_size = 3;
