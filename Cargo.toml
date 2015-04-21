@@ -1,7 +1,12 @@
 [package]
 name = "se_rs_ial"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["bryal <96.bryal@gmail.com>"]
+description = "Cross-platform serial communications library in Rust"
+repository = "https://github.com/bryal/se-rs-ial"
+documentation = "https://github.com/bryal/se-rs-ial/se_rs_ial/"
+readme = "README.md"
+keywords = ["Windows", "terminal", "serial", "communications", "COM"]
 license = "MIT"
 
 [dependencies]

@@ -42,7 +42,7 @@ pub struct CommEventWaiter<'a> {
 }
 
 impl<'a> CommEventWaiter<'a> {
-	pub fn wait_for_event(&self) -> Result<CommEventFlags, DWORD> {
+	pub fn wait_for_event(&mut self) -> Result<CommEventFlags, DWORD> {
 		let mut events = CommEventFlags::empty();
 		let (succeded, err) = unsafe { (
 			WaitCommEvent(self.comm_handle, &mut events, ptr::null_mut()) != 0,
