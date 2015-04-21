@@ -1,10 +1,10 @@
 [package]
 name = "se_rs_ial"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["bryal <96.bryal@gmail.com>"]
-description = "Cross-platform serial communications library in Rust"
+description = "Windows serial communications library in Rust"
 repository = "https://github.com/bryal/se-rs-ial"
-documentation = "https://github.com/bryal/se-rs-ial/se_rs_ial/"
+documentation = "https://bryal.github.io/se-rs-ial/se_rs_ial/"
 readme = "README.md"
 keywords = ["Windows", "terminal", "serial", "communications", "COM"]
 license = "MIT"
