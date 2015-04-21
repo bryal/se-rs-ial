@@ -22,9 +22,11 @@
 
 #![allow(non_snake_case, non_camel_case_types, dead_code, non_upper_case_globals)]
 
-use libc::{ c_char, LPOVERLAPPED };
-use winapi::{ DWORD, HANDLE, BOOL, WORD, BYTE };
+use libc::{ c_int, c_char, LPOVERLAPPED, HANDLE, DWORD, WORD, BOOL, BYTE };
 use std::fmt;
+
+pub const ERROR_INVALID_USER_BUFFER: c_int = 1784;
+pub const ERROR_NOT_ENOUGH_MEMORY: c_int = 8;
 
 bitflags!{
 	#[repr(C)]

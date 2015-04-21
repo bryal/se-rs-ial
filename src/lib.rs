@@ -25,13 +25,12 @@
 #[macro_use]
 extern crate bitflags;
 extern crate libc;
-extern crate winapi;
 
 pub use ffi::*;
 
+use libc::consts::os::extra::*;
 use libc::funcs::extra::kernel32;
-use libc::c_void;
-use winapi::{ HANDLE, DWORD };
+use libc::{ c_void, c_int, HANDLE, DWORD };
 use std::{ ptr, mem, io };
 use std::io::{ Error, ErrorKind };
 
@@ -40,7 +39,6 @@ mod ffi;
 pub struct CommEventWaiter<'a> {
 	comm_handle: &'a mut c_void
 }
-
 impl<'a> CommEventWaiter<'a> {
 	pub fn wait_for_event(&mut self) -> Result<CommEventFlags, DWORD> {
 		let mut events = CommEventFlags::empty();
@@ -56,36 +54,36 @@ impl<'a> CommEventWaiter<'a> {
 		}
 	}
 }
-
 unsafe impl<'a> Send for CommEventWaiter<'a> { }
 
+/// A serial connection
 pub struct Connection {
 	// Pointer to the serial connection
 	comm_handle: HANDLE
 }
-
 impl Connection {
+	/// Open a new connection via port `port` with baud rate `baud_rate`
 	pub fn new(port: &str, baud_rate: u32) -> io::Result<Connection> {
 		let (comm_handle, cf_result) = unsafe {
 			let mut port_u16: Vec<_> = port.utf16_units().collect();
 			port_u16.push(0);
 			(
 				kernel32::CreateFileW(port_u16.as_ptr(),
-					winapi::GENERIC_READ | winapi::GENERIC_WRITE,
+					GENERIC_READ | GENERIC_WRITE,
 					0,
 					ptr::null_mut(),
-					winapi::OPEN_EXISTING,
+					OPEN_EXISTING,
 					libc::FILE_ATTRIBUTE_NORMAL,
 					ptr::null_mut()),
-				kernel32::GetLastError()
+				kernel32::GetLastError() as c_int
 			)
 		};
 
-		if comm_handle == winapi::INVALID_HANDLE_VALUE {
+		if comm_handle == INVALID_HANDLE_VALUE {
 			Err(match cf_result {
-				winapi::ERROR_ACCESS_DENIED =>
+				ERROR_ACCESS_DENIED =>
 					Error::new(ErrorKind::AlreadyExists, "Access denied, port might be busy"),
-				winapi::ERROR_FILE_NOT_FOUND =>
+				ERROR_FILE_NOT_FOUND =>
 					Error::new(ErrorKind::NotFound, "COM port does not exist"),
 				_ => Error::new(ErrorKind::Other, "Invalid COM port handle")
 			})
@@ -111,6 +109,7 @@ impl Connection {
 		}
 	}
 
+	/// Retrieve the current control settings for this communications device
 	fn get_comm_state(&mut self) -> Result<DCB, ()> {
 		unsafe {
 			let mut dcb = mem::zeroed();
@@ -122,6 +121,8 @@ impl Connection {
 		}
 	}
 
+	/// Configures this communications device according to specifications in a device-control block,
+	/// `dcb`.
 	fn set_comm_state(&mut self, mut dcb: DCB) -> Result<(), ()> {
 		if unsafe { SetCommState(self.comm_handle, &mut dcb) } == 0 {
 			Err(())
@@ -134,6 +135,7 @@ impl Connection {
 		CommEventWaiter{ comm_handle: unsafe { mem::transmute(self.comm_handle) } }
 	}
 
+	/// Set interval and total timeouts to `timeout_ms`
 	pub fn set_timeout(&mut self, timeout_ms: u32) -> Result<(), ()> {
 		unsafe {
 			if SetCommTimeouts(self.comm_handle, &mut COMMTIMEOUTS{
@@ -151,8 +153,8 @@ impl Connection {
 		}
 	}
 
-	// Read into `buf` until `delim` is encountered. Returns n.o. bytes read.
-	// If `delim` is never found, truncate `buf` to original size and return 0.
+	/// Read into `buf` until `delim` is encountered. Return n.o. bytes read on success,
+	/// and an IO error on failure.
 	pub fn read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
 		use std::io::Read;
 
@@ -179,12 +181,11 @@ impl Connection {
 		Err(Error::new(ErrorKind::Other, "Delimiter was not found"))
 	}
 
-	// Read until newline. Return n.o. bytes read
+	/// Read until newline. Return n.o. bytes read on success
 	pub fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
 		self.read_until('\n' as u8, buf)
 	}
 }
-
 impl io::Read for Connection {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		if buf.len() == 0 {
@@ -198,7 +199,7 @@ impl io::Read for Connection {
 				buf.len() as u32,
 				&mut n_bytes_read,
 				ptr::null_mut()) > 0,
-			kernel32::GetLastError()
+			kernel32::GetLastError() as c_int
 		) };
 
 		if succeded {
@@ -209,18 +210,17 @@ impl io::Read for Connection {
 			}
 		} else {
 			Err(match err {
-				winapi::ERROR_INVALID_USER_BUFFER =>
+				ERROR_INVALID_USER_BUFFER =>
 					Error::new(ErrorKind::InvalidInput, "Supplied buffer is invalid"),
-				winapi::ERROR_NOT_ENOUGH_MEMORY =>
+				ERROR_NOT_ENOUGH_MEMORY =>
 					Error::new(ErrorKind::Other, "Too many I/O requests"),
-				winapi::ERROR_OPERATION_ABORTED =>
+				ERROR_OPERATION_ABORTED =>
 					Error::new(ErrorKind::Interrupted, "Operation was canceled"),
 				_ => Error::new(ErrorKind::Other, format!("Read failed with 0x{:x}", err))
 			})
 		}
 	}
 }
-
 impl io::Write for Connection {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let mut n_bytes_written = 0;
@@ -231,18 +231,18 @@ impl io::Write for Connection {
 				buf.len() as u32,
 				&mut n_bytes_written,
 				ptr::null_mut()) != 0,
-			kernel32::GetLastError()
+			kernel32::GetLastError() as c_int
 		) };
 
 		if succeded {
 			Ok(n_bytes_written as usize)
 		} else {
 			Err(match err {
-				winapi::ERROR_INVALID_USER_BUFFER =>
+				ERROR_INVALID_USER_BUFFER =>
 					Error::new(ErrorKind::InvalidInput, "Supplied buffer is invalid"),
-				winapi::ERROR_NOT_ENOUGH_MEMORY =>
+				ERROR_NOT_ENOUGH_MEMORY =>
 					Error::new(ErrorKind::Other, "Too many I/O requests"),
-				winapi::ERROR_OPERATION_ABORTED =>
+				ERROR_OPERATION_ABORTED =>
 					Error::new(ErrorKind::Interrupted, "Operation was canceled"),
 				_ => Error::new(ErrorKind::Other, format!("Write failed with 0x{:x}", err))
 			})
@@ -253,7 +253,6 @@ impl io::Write for Connection {
 		Ok(())
 	}
 }
-
 impl Drop for Connection {
 	fn drop(&mut self) {
 		let e = unsafe { kernel32::CloseHandle(self.comm_handle) };
@@ -262,7 +261,6 @@ impl Drop for Connection {
 		}
 	}
 }
-
 unsafe impl Send for Connection { }
 
 // Some tests requires correct code to be running on connected serial device

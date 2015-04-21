@@ -10,6 +10,5 @@ keywords = ["Windows", "terminal", "serial", "communications", "COM"]
 license = "MIT"
 
 [dependencies]
-winapi = "*"
 libc = "*"
 bitflags = "*"
