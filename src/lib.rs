@@ -20,14 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#![feature(collections, step_by)]
-
 #[macro_use]
 extern crate bitflags;
 extern crate libc;
 
+#[cfg(windows)]
+extern crate serial_win;
 #[cfg(unix)]
 extern crate serial;
 
 #[cfg(windows)]
-extern crate serial_win;
+struct Connection {
+	conn: serial_win::Connection
+}
+#[cfg(unix)]
+struct Connection {
+	conn: serial::SerialPort
+}

@@ -12,5 +12,13 @@ license = "MIT"
 [dependencies]
 libc = "*"
 bitflags = "*"
-serial = "*"
+
+[dependencies.serial]
+git = "https://github.com/japaric/serial.rs"
+
+[target.i686-pc-windows-gnu.dependencies]
+serial-win = "*"
+[target.x86-pc-windows-gnu.dependencies]
+serial-win = "*"
+[target.x86_64-pc-windows-gnu.dependencies]
 serial-win = "*"
