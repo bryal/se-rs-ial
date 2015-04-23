@@ -1,6 +1,6 @@
 [package]
 name = "se_rs_ial"
-version = "0.0.3"
+version = "0.1.0"
 authors = ["bryal <96.bryal@gmail.com>"]
 description = "Windows serial communications library in Rust"
 repository = "https://github.com/bryal/se-rs-ial"
@@ -12,3 +12,5 @@ license = "MIT"
 [dependencies]
 libc = "*"
 bitflags = "*"
+serial = "*"
+serial-win = "*"
