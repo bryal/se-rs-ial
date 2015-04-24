@@ -13,8 +13,12 @@ license = "MIT"
 libc = "*"
 bitflags = "*"
 
-[dependencies.serial]
-git = "https://github.com/japaric/serial.rs"
+[target.i686-unknown-linux-gnu.dependencies.serial]
+git = "https://github.com/bryal/serial.rs"
+[target.x86-unknown-linux-gnu.dependencies.serial]
+git = "https://github.com/bryal/serial.rs"
+[target.x86_64-unknown-linux-gnu.dependencies.serial]
+git = "https://github.com/bryal/serial.rs"
 
 [target.i686-pc-windows-gnu.dependencies]
 serial-win = "*"
