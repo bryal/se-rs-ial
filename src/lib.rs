@@ -27,8 +27,11 @@ extern crate serial_win;
 #[cfg(unix)]
 extern crate serial;
 
-use std::io::{ self, Error, ErrorKind };
+use std::io;
+#[cfg(unix)]
+use std::io::{ Error, ErrorKind };
 
+// Windows only
 #[cfg(windows)]
 pub struct Connection {
 	conn: serial_win::Connection
@@ -38,8 +41,17 @@ impl Connection {
 	pub fn open(port: &str, baud_rate: u32) -> io::Result<Connection> {
 		serial_win::Connection::new(port, baud_rate).map(|conn| Connection { conn: conn })
 	}
+
+	pub fn baud_rate(&self) -> io::Result<u32> {
+		self.conn.baud_rate()
+	}
+
+	pub fn set_baud_rate(&mut self, baud_rate: u32) -> io::Result<()> {
+		self.conn.set_baud_rate(baud_rate)
+	}
 }
 
+// Unix-like only
 #[cfg(unix)]
 pub struct Connection {
 	conn: serial::SerialPort
@@ -52,10 +64,40 @@ impl Connection {
 	/// 0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800,
 	/// 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400
 	pub fn open(port: &str, baud_rate: u32) -> io::Result<Connection> {
-		use serial::BaudRate::*;
-		use std::path::Path;
+		serial::SerialPort::open(&std::path::Path::new(port))
+			.map(|serial_port| Connection{ conn: serial_port })
+			.and_then(|mut conn| conn.set_baud_rate(baud_rate).map(|_| conn))
+	}
 
-		let baud_rate = match baud_rate {
+	pub fn baud_rate(&self) -> io::Result<u32> {
+		use serial::BaudRate::*;
+		self.conn.baud_rate().map(|(_, ebaud)| match ebaud {
+			B0 => 0,
+			B50 => 50,
+			B75 => 75,
+			B110 => 110,
+			B134 => 134,
+			B150 => 150,
+			B200 => 200,
+			B300 => 300,
+			B600 => 600,
+			B1200 => 1200,
+			B1800 => 1800,
+			B2400 => 2400,
+			B4800 => 4800,
+			B9600 => 9600,
+			B19200 => 19200,
+			B38400 => 38400,
+			B57600 => 57600,
+			B115200 => 115200,
+			B230400 => 230400,
+		})
+	}
+
+	pub fn set_baud_rate(&mut self, baud_rate: u32) -> io::Result<()> {
+		use serial::BaudRate::*;
+
+		let ebaud_rate = match baud_rate {
 			0 => B0,
 			50 => B50,
 			75 => B75,
@@ -75,17 +117,18 @@ impl Connection {
 			57600 => B57600,
 			115200 => B115200,
 			230400 => B230400,
-			_ => return Err(Error::new(ErrorKind::InvalidInput, "Unsupported baud rate. View docs for more info"))
+			_ => return Err(Error::new(
+				ErrorKind::InvalidInput, "Unsupported baud rate"
+			))
 		};
 
-		match serial::SerialPort::open(&Path::new(port)) {
-			Ok(mut conn) => match conn.set_baud_rate(serial::Direction::Both, baud_rate) {
-				Ok(_) => Ok(Connection{ conn: conn }),
-				Err(e) => Err(e),
-			},
-			Err(e) => Err(e),
-		}
+		self.conn.set_baud_rate(serial::Direction::Both, ebaud_rate)
 	}
+}
+
+// Common implementations
+impl Connection {
+
 }
 
 #[cfg(test)]
@@ -105,7 +148,7 @@ mod tests {
 
 	#[test]
 	fn test() {
-		let (conn, port) = PORTS.iter().filter_map(|&port| {
+		let (mut conn, port) = PORTS.iter().filter_map(|&port| {
 				match Connection::open(&port, 9600).map(|c| (c, port)) {
 					Ok(o) => Some(o),
 					Err(e) => {
@@ -116,6 +159,11 @@ mod tests {
 			})
 			.next()
 			.unwrap();
+
 		println!("Serial connection open on port {}", port);
+
+		println!("baud: {}", conn.baud_rate().unwrap());
+		conn.set_baud_rate(115_200).unwrap();
+		println!("new baud: {}", conn.baud_rate().unwrap());
 	}
 }
