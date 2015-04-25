@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["BaudRate",""],["ByteSize",""],["Parity",""],["StopBits",""]],"struct":[["Connection",""]]});
