@@ -2,11 +2,11 @@
 name = "se_rs_ial"
 version = "0.1.1"
 authors = ["bryal <96.bryal@gmail.com>"]
-description = "Windows serial communications library in Rust"
+description = "Cross-platform serial communications"
 repository = "https://github.com/bryal/se-rs-ial"
 documentation = "https://bryal.github.io/se-rs-ial/se_rs_ial/"
 readme = "README.md"
-keywords = ["Windows", "terminal", "serial", "communications", "COM"]
+keywords = ["windows", "unix", "terminal", "serial", "communications"]
 license = "MIT"
 
 [dependencies]
@@ -21,8 +21,8 @@ git = "https://github.com/bryal/serial.rs"
 git = "https://github.com/bryal/serial.rs"
 
 [target.i686-pc-windows-gnu.dependencies.serial-win]
-git = "https://github.com/bryal/serial-win-rs"
+serial-win = "*"
 [target.x86-pc-windows-gnu.dependencies.serial-win]
-git = "https://github.com/bryal/serial-win-rs"
+serial-win = "*"
 [target.x86_64-pc-windows-gnu.dependencies.serial-win]
-git = "https://github.com/bryal/serial-win-rs"
+serial-win = "*"
