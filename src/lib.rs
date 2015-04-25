@@ -31,7 +31,7 @@ use std::io;
 #[cfg(windows)]
 use std::io::{ Error, ErrorKind };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BaudRate {
 	B0 = 0,
 	B50 = 50,
@@ -54,7 +54,7 @@ pub enum BaudRate {
 	B230400 = 230400,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ByteSize {
 	B5,
 	B6,
@@ -63,7 +63,7 @@ pub enum ByteSize {
 }
 
 #[cfg(windows)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Parity {
 	None,
 	Even,
@@ -73,7 +73,7 @@ pub enum Parity {
 }
 
 #[cfg(windows)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopBits {
 	B1,
 	B1p5,
@@ -182,7 +182,7 @@ impl Connection {
 }
 
 #[cfg(unix)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Parity {
 	None,
 	Even,
@@ -190,7 +190,7 @@ pub enum Parity {
 }
 
 #[cfg(unix)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopBits {
 	B1,
 	B2,
@@ -209,9 +209,14 @@ impl Connection {
 	/// 0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800,
 	/// 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400
 	pub fn open(port: &str, baud_rate: BaudRate) -> io::Result<Connection> {
-		serial::SerialPort::open(&std::path::Path::new(port))
+		serial::OpenOptions::new()
+			.read(true).write(true)
+			.open(port)
 			.map(|serial_port| Connection{ conn: serial_port })
-			.and_then(|mut conn| conn.set_baud_rate(baud_rate).map(|_| conn))
+			.and_then(|mut conn| conn.set_baud_rate(baud_rate)
+				.and_then(|_| conn.set_byte_size(ByteSize::B8))
+				.and_then(|_| conn.set_parity(Parity::None))
+				.and_then(|_| conn.set_stop_bits(StopBits::B1).map(|_| conn)))
 	}
 
 	pub fn baud_rate(&self) -> io::Result<BaudRate> {
@@ -321,6 +326,22 @@ impl Connection {
 	}
 }
 
+impl io::Write for Connection {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		self.conn.write(buf)
+	}
+
+	fn flush(&mut self) -> io::Result<()> {
+		self.conn.flush()
+	}
+}
+
+impl io::Read for Connection {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		self.conn.read(buf)
+	}
+}
+
 // Common implementations
 impl Connection {
 
@@ -330,20 +351,32 @@ impl Connection {
 mod tests {
 	use super::*;
 
+	// Change these to whatever works on system of test
 	#[cfg(unix)]
-	const PORTS: [&'static str; 10] = [
-		"/dev/ttyS0", "/dev/ttyS1", "/dev/ttyS2", "/dev/ttyS3", "/dev/ttyS4",
-		"/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2",
-		"/dev/ttyACM0", "/dev/ttyACM1"
-	];
+	const PORT: &'static str = "/dev/ttyUSB0";
 	#[cfg(windows)]
-	const PORTS: [&'static str; 10] = [
-		"COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"
-	];
+	const PORT: &'static str = "COM8";
 
+	// Multiple threads can't access same serial port at the same time. Run sequentially
 	#[test]
-	fn test() {
-		let (mut conn, port) = PORTS.iter().filter_map(|&port| {
+	fn sequential_tests() {
+		test_find_and_open();
+		test_configure();
+	}
+
+	fn test_find_and_open() {
+		#[cfg(unix)]
+		const PORTS: [&'static str; 10] = [
+			"/dev/ttyS0", "/dev/ttyS1", "/dev/ttyS2", "/dev/ttyS3", "/dev/ttyS4",
+			"/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2",
+			"/dev/ttyACM0", "/dev/ttyACM1"
+		];
+		#[cfg(windows)]
+		const PORTS: [&'static str; 10] = [
+			"COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"
+		];
+
+		let (_, port) = PORTS.iter().filter_map(|&port| {
 				match Connection::open(&port, BaudRate::B9600).map(|c| (c, port)) {
 					Ok(o) => Some(o),
 					Err(e) => {
@@ -356,21 +389,22 @@ mod tests {
 			.unwrap();
 
 		println!("Serial connection open on port {}", port);
+	}
 
-		println!("baud: {:?}", conn.baud_rate().unwrap());
-		conn.set_baud_rate(BaudRate::B115200).unwrap();
-		println!("new baud: {:?}", conn.baud_rate().unwrap());
+	fn test_configure() {
+		let mut conn = Connection::open(PORT, BaudRate::B9600).unwrap();
 
-		println!("byte size: {:?}", conn.byte_size().unwrap());
-		conn.set_byte_size(ByteSize::B8).unwrap();
-		println!("new byte size: {:?}", conn.byte_size().unwrap());
+		assert_eq!(conn.baud_rate().unwrap(), BaudRate::B9600);
+		
+		conn.set_baud_rate(BaudRate::B115200)
+			.and_then(|_| conn.set_byte_size(ByteSize::B7))
+			.and_then(|_| conn.set_parity(Parity::Odd))
+			.and_then(|_| conn.set_stop_bits(StopBits::B2))
+			.unwrap();
 
-		println!("parity: {:?}", conn.parity().unwrap());
-		conn.set_parity(Parity::None).unwrap();
-		println!("new parity: {:?}", conn.parity().unwrap());
-
-		println!("stop bits: {:?}", conn.stop_bits().unwrap());
-		conn.set_stop_bits(StopBits::B1).unwrap();
-		println!("new stop bits: {:?}", conn.stop_bits().unwrap());
+		assert_eq!(conn.baud_rate().unwrap(), BaudRate::B115200);
+		assert_eq!(conn.byte_size().unwrap(), ByteSize::B7);
+		assert_eq!(conn.parity().unwrap(), Parity::Odd);
+		assert_eq!(conn.stop_bits().unwrap(), StopBits::B2);
 	}
 }

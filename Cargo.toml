@@ -1,6 +1,6 @@
 [package]
 name = "se_rs_ial"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["bryal <96.bryal@gmail.com>"]
 description = "Cross-platform serial communications"
 repository = "https://github.com/bryal/se-rs-ial"
