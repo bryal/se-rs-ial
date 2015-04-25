@@ -15,7 +15,13 @@ Cross-platform serial communications library in Rust.
 
 	conn.write("Hello World!\n".as_bytes()).unwrap();
 
-# [Documentation](https://bryal.github.io/se-rs-ial/se_rs_ial/)
+# Documentation
+
+There are minor variances between the builds for the different platforms.
+
+[Documentation for Windows](https://bryal.github.io/se-rs-ial/windows/se_rs_ial/)
+
+[Documentation for Unix-like](https://bryal.github.io/se-rs-ial/unix/se_rs_ial/)
 
 # Examples
 
