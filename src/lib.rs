@@ -28,8 +28,57 @@ extern crate serial_win;
 extern crate serial;
 
 use std::io;
-#[cfg(unix)]
+#[cfg(windows)]
 use std::io::{ Error, ErrorKind };
+
+#[derive(Debug, Clone)]
+pub enum BaudRate {
+	B0 = 0,
+	B50 = 50,
+	B75 = 75,
+	B110 = 110,
+	B134 = 134,
+	B150 = 150,
+	B200 = 200,
+	B300 = 300,
+	B600 = 600,
+	B1200 = 1200,
+	B1800 = 1800,
+	B2400 = 2400,
+	B4800 = 4800,
+	B9600 = 9600,
+	B19200 = 19200,
+	B38400 = 38400,
+	B57600 = 57600,
+	B115200 = 115200,
+	B230400 = 230400,
+}
+
+#[derive(Debug, Clone)]
+pub enum ByteSize {
+	B5,
+	B6,
+	B7,
+	B8,
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub enum Parity {
+	None,
+	Even,
+	Odd,
+	Mark,
+	Space,
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub enum StopBits {
+	B1,
+	B1p5,
+	B2,
+}
 
 // Windows only
 #[cfg(windows)]
@@ -38,17 +87,113 @@ pub struct Connection {
 }
 #[cfg(windows)]
 impl Connection {
-	pub fn open(port: &str, baud_rate: u32) -> io::Result<Connection> {
-		serial_win::Connection::new(port, baud_rate).map(|conn| Connection { conn: conn })
+	pub fn open(port: &str, baud_rate: BaudRate) -> io::Result<Connection> {
+		serial_win::Connection::new(port, baud_rate as u32).map(|conn| Connection { conn: conn })
 	}
 
-	pub fn baud_rate(&self) -> io::Result<u32> {
-		self.conn.baud_rate()
+	pub fn baud_rate(&self) -> io::Result<BaudRate> {
+		use BaudRate::*;
+		self.conn.baud_rate().and_then(|baud_rate| match baud_rate {
+			0 => Ok(B0),
+			50 => Ok(B50),
+			75 => Ok(B75),
+			110 => Ok(B110),
+			134 => Ok(B134),
+			150 => Ok(B150),
+			200 => Ok(B200),
+			300 => Ok(B300),
+			600 => Ok(B600),
+			1200 => Ok(B1200),
+			1800 => Ok(B1800),
+			2400 => Ok(B2400),
+			4800 => Ok(B4800),
+			9600 => Ok(B9600),
+			19200 => Ok(B19200),
+			38400 => Ok(B38400),
+			57600 => Ok(B57600),
+			115200 => Ok(B115200),
+			230400 => Ok(B230400),
+			x => Err(Error::new(ErrorKind::Other, format!("Unexpected baud rate returned: {}", x)))
+		})
 	}
 
-	pub fn set_baud_rate(&mut self, baud_rate: u32) -> io::Result<()> {
-		self.conn.set_baud_rate(baud_rate)
+	pub fn set_baud_rate(&mut self, baud_rate: BaudRate) -> io::Result<()> {
+		self.conn.set_baud_rate(baud_rate as u32)
 	}
+
+	pub fn byte_size(&self) -> io::Result<ByteSize> {
+		self.conn.byte_size().and_then(|byte_size| match byte_size {
+			5 => Ok(ByteSize::B5),
+			6 => Ok(ByteSize::B6),
+			7 => Ok(ByteSize::B7),
+			8 => Ok(ByteSize::B8),
+			x => Err(Error::new(ErrorKind::Other, format!("Unexpected byte size returned: {}", x)))
+		})
+	}
+
+	pub fn set_byte_size(&mut self, byte_size: ByteSize) -> io::Result<()> {
+		self.conn.set_byte_size(match byte_size {
+			ByteSize::B5 => 5,
+			ByteSize::B6 => 6,
+			ByteSize::B7 => 7,
+			ByteSize::B8 => 8,
+		})
+	}
+
+	pub fn parity(&self) -> io::Result<Parity> {
+		use serial_win::Parity::*;
+		self.conn.parity().map(|parity| match parity {
+			NO => Parity::None,
+			EVEN => Parity::Even,
+			ODD => Parity::Odd,
+			MARK => Parity::Mark,
+			SPACE => Parity::Space,
+		})
+	}
+
+	pub fn set_parity(&mut self, parity: Parity) -> io::Result<()> {
+		use serial_win::Parity::*;
+		self.conn.set_parity(match parity {
+			Parity::None => NO,
+			Parity::Even => EVEN,
+			Parity::Odd => ODD,
+			Parity::Mark => MARK,
+			Parity::Space => SPACE,
+		})
+	}
+
+	pub fn stop_bits(&self) -> io::Result<StopBits> {
+		use serial_win::StopBits::*;
+		self.conn.stop_bits().map(|stop_bits| match stop_bits {
+			ONE => StopBits::B1,
+			ONE5 => StopBits::B1p5,
+			TWO => StopBits::B2,
+		})
+	}
+
+	pub fn set_stop_bits(&mut self, stop_bits: StopBits) -> io::Result<()> {
+		use serial_win::StopBits::*;
+		self.conn.set_stop_bits(match stop_bits {
+			StopBits::B1 => ONE,
+			StopBits::B1p5 => ONE5,
+			StopBits::B2 => TWO,
+		})
+	}
+}
+
+#[cfg(unix)]
+#[derive(Debug, Clone)]
+pub enum Parity {
+	None,
+	Even,
+	Odd,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Clone)]
+pub enum StopBits {
+	B1,
+	B2,
 }
 
 // Unix-like only
@@ -63,66 +208,116 @@ impl Connection {
 	/// Supported baud rates are:
 	/// 0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800,
 	/// 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400
-	pub fn open(port: &str, baud_rate: u32) -> io::Result<Connection> {
+	pub fn open(port: &str, baud_rate: BaudRate) -> io::Result<Connection> {
 		serial::SerialPort::open(&std::path::Path::new(port))
 			.map(|serial_port| Connection{ conn: serial_port })
 			.and_then(|mut conn| conn.set_baud_rate(baud_rate).map(|_| conn))
 	}
 
-	pub fn baud_rate(&self) -> io::Result<u32> {
-		use serial::BaudRate::*;
-		self.conn.baud_rate().map(|(_, ebaud)| match ebaud {
-			B0 => 0,
-			B50 => 50,
-			B75 => 75,
-			B110 => 110,
-			B134 => 134,
-			B150 => 150,
-			B200 => 200,
-			B300 => 300,
-			B600 => 600,
-			B1200 => 1200,
-			B1800 => 1800,
-			B2400 => 2400,
-			B4800 => 4800,
-			B9600 => 9600,
-			B19200 => 19200,
-			B38400 => 38400,
-			B57600 => 57600,
-			B115200 => 115200,
-			B230400 => 230400,
+	pub fn baud_rate(&self) -> io::Result<BaudRate> {
+		use serial::BaudRate as SBaudRate;
+		use BaudRate::*;
+		self.conn.baud_rate().map(|(_, out_baud)| match out_baud {
+			SBaudRate::B0 => B0,
+			SBaudRate::B50 => B50,
+			SBaudRate::B75 => B75,
+			SBaudRate::B110 => B110,
+			SBaudRate::B134 => B134,
+			SBaudRate::B150 => B150,
+			SBaudRate::B200 => B200,
+			SBaudRate::B300 => B300,
+			SBaudRate::B600 => B600,
+			SBaudRate::B1200 => B1200,
+			SBaudRate::B1800 => B1800,
+			SBaudRate::B2400 => B2400,
+			SBaudRate::B4800 => B4800,
+			SBaudRate::B9600 => B9600,
+			SBaudRate::B19200 => B19200,
+			SBaudRate::B38400 => B38400,
+			SBaudRate::B57600 => B57600,
+			SBaudRate::B115200 => B115200,
+			SBaudRate::B230400 => B230400,
 		})
 	}
 
-	pub fn set_baud_rate(&mut self, baud_rate: u32) -> io::Result<()> {
-		use serial::BaudRate::*;
+	pub fn set_baud_rate(&mut self, baud_rate: BaudRate) -> io::Result<()> {
+		use serial::BaudRate as SBaudRate;
+		use BaudRate::*;
+		self.conn.set_baud_rate(serial::Direction::Both, match baud_rate {
+			B0 => SBaudRate::B0,
+			B50 => SBaudRate::B50,
+			B75 => SBaudRate::B75,
+			B110 => SBaudRate::B110,
+			B134 => SBaudRate::B134,
+			B150 => SBaudRate::B150,
+			B200 => SBaudRate::B200,
+			B300 => SBaudRate::B300,
+			B600 => SBaudRate::B600,
+			B1200 => SBaudRate::B1200,
+			B1800 => SBaudRate::B1800,
+			B2400 => SBaudRate::B2400,
+			B4800 => SBaudRate::B4800,
+			B9600 => SBaudRate::B9600,
+			B19200 => SBaudRate::B19200,
+			B38400 => SBaudRate::B38400,
+			B57600 => SBaudRate::B57600,
+			B115200 => SBaudRate::B115200,
+			B230400 => SBaudRate::B230400,
+		})
+	}
 
-		let ebaud_rate = match baud_rate {
-			0 => B0,
-			50 => B50,
-			75 => B75,
-			110 => B110,
-			134 => B134,
-			150 => B150,
-			200 => B200,
-			300 => B300,
-			600 => B600,
-			1200 => B1200,
-			1800 => B1800,
-			2400 => B2400,
-			4800 => B4800,
-			9600 => B9600,
-			19200 => B19200,
-			38400 => B38400,
-			57600 => B57600,
-			115200 => B115200,
-			230400 => B230400,
-			_ => return Err(Error::new(
-				ErrorKind::InvalidInput, "Unsupported baud rate"
-			))
-		};
+	pub fn byte_size(&self) -> io::Result<ByteSize> {
+		use serial::DataBits::*;
+		self.conn.data_bits().map(|byte_size| match byte_size {
+			Five => ByteSize::B5,
+			Six => ByteSize::B6,
+			Seven => ByteSize::B7,
+			Eight => ByteSize::B8,
+		})
+	}
 
-		self.conn.set_baud_rate(serial::Direction::Both, ebaud_rate)
+	pub fn set_byte_size(&mut self, byte_size: ByteSize) -> io::Result<()> {
+		use serial::DataBits::*;
+		self.conn.set_data_bits(match byte_size {
+			ByteSize::B5 => Five,
+			ByteSize::B6 => Six,
+			ByteSize::B7 => Seven,
+			ByteSize::B8 => Eight,
+		})
+	}
+
+	pub fn parity(&self) -> io::Result<Parity> {
+		use serial::Parity as SParity;
+		self.conn.parity().and_then(|parity| match parity {
+			SParity::None => Ok(Parity::None),
+			SParity::Even => Ok(Parity::Even),
+			SParity::Odd => Ok(Parity::Odd),
+		})
+	}
+
+	pub fn set_parity(&mut self, parity: Parity) -> io::Result<()> {
+		use serial::Parity as SParity;
+		self.conn.set_parity(match parity {
+			Parity::None => SParity::None,
+			Parity::Even => SParity::Even,
+			Parity::Odd => SParity::Odd,
+		})
+	}
+
+	pub fn stop_bits(&self) -> io::Result<StopBits> {
+		use serial::StopBits::*;
+		self.conn.stop_bits().map(|stop_bits| match stop_bits {
+			One => StopBits::B1,
+			Two => StopBits::B2,
+		})
+	}
+
+	pub fn set_stop_bits(&mut self, stop_bits: StopBits) -> io::Result<()> {
+		use serial::StopBits::*;
+		self.conn.set_stop_bits(match stop_bits {
+			StopBits::B1 => One,
+			StopBits::B2 => Two,
+		})
 	}
 }
 
@@ -149,7 +344,7 @@ mod tests {
 	#[test]
 	fn test() {
 		let (mut conn, port) = PORTS.iter().filter_map(|&port| {
-				match Connection::open(&port, 9600).map(|c| (c, port)) {
+				match Connection::open(&port, BaudRate::B9600).map(|c| (c, port)) {
 					Ok(o) => Some(o),
 					Err(e) => {
 						println!("Error opening connection on port {}: {}", port, e);
@@ -162,8 +357,20 @@ mod tests {
 
 		println!("Serial connection open on port {}", port);
 
-		println!("baud: {}", conn.baud_rate().unwrap());
-		conn.set_baud_rate(115_200).unwrap();
-		println!("new baud: {}", conn.baud_rate().unwrap());
+		println!("baud: {:?}", conn.baud_rate().unwrap());
+		conn.set_baud_rate(BaudRate::B115200).unwrap();
+		println!("new baud: {:?}", conn.baud_rate().unwrap());
+
+		println!("byte size: {:?}", conn.byte_size().unwrap());
+		conn.set_byte_size(ByteSize::B8).unwrap();
+		println!("new byte size: {:?}", conn.byte_size().unwrap());
+
+		println!("parity: {:?}", conn.parity().unwrap());
+		conn.set_parity(Parity::None).unwrap();
+		println!("new parity: {:?}", conn.parity().unwrap());
+
+		println!("stop bits: {:?}", conn.stop_bits().unwrap());
+		conn.set_stop_bits(StopBits::B1).unwrap();
+		println!("new stop bits: {:?}", conn.stop_bits().unwrap());
 	}
 }

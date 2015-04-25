@@ -1,6 +1,6 @@
 [package]
 name = "se_rs_ial"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["bryal <96.bryal@gmail.com>"]
 description = "Windows serial communications library in Rust"
 repository = "https://github.com/bryal/se-rs-ial"
@@ -20,9 +20,9 @@ git = "https://github.com/bryal/serial.rs"
 [target.x86_64-unknown-linux-gnu.dependencies.serial]
 git = "https://github.com/bryal/serial.rs"
 
-[target.i686-pc-windows-gnu.dependencies]
-serial-win = "*"
-[target.x86-pc-windows-gnu.dependencies]
-serial-win = "*"
-[target.x86_64-pc-windows-gnu.dependencies]
-serial-win = "*"
+[target.i686-pc-windows-gnu.dependencies.serial-win]
+git = "https://github.com/bryal/serial-win-rs"
+[target.x86-pc-windows-gnu.dependencies.serial-win]
+git = "https://github.com/bryal/serial-win-rs"
+[target.x86_64-pc-windows-gnu.dependencies.serial-win]
+git = "https://github.com/bryal/serial-win-rs"
