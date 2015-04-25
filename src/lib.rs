@@ -53,6 +53,33 @@ pub enum BaudRate {
 	B115200 = 115200,
 	B230400 = 230400,
 }
+impl BaudRate {
+	pub fn from_u32(n: u32) -> Option<BaudRate> {
+		use BaudRate::*;
+		match n {
+			0 => Some(B0),
+			50 => Some(B50),
+			75 => Some(B75),
+			110 => Some(B110),
+			134 => Some(B134),
+			150 => Some(B150),
+			200 => Some(B200),
+			300 => Some(B300),
+			600 => Some(B600),
+			1200 => Some(B1200),
+			1800 => Some(B1800),
+			2400 => Some(B2400),
+			4800 => Some(B4800),
+			9600 => Some(B9600),
+			19200 => Some(B19200),
+			38400 => Some(B38400),
+			57600 => Some(B57600),
+			115200 => Some(B115200),
+			230400 => Some(B230400),
+			_ => None
+		}	
+	}
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ByteSize {
@@ -92,29 +119,9 @@ impl Connection {
 	}
 
 	pub fn baud_rate(&self) -> io::Result<BaudRate> {
-		use BaudRate::*;
-		self.conn.baud_rate().and_then(|baud_rate| match baud_rate {
-			0 => Ok(B0),
-			50 => Ok(B50),
-			75 => Ok(B75),
-			110 => Ok(B110),
-			134 => Ok(B134),
-			150 => Ok(B150),
-			200 => Ok(B200),
-			300 => Ok(B300),
-			600 => Ok(B600),
-			1200 => Ok(B1200),
-			1800 => Ok(B1800),
-			2400 => Ok(B2400),
-			4800 => Ok(B4800),
-			9600 => Ok(B9600),
-			19200 => Ok(B19200),
-			38400 => Ok(B38400),
-			57600 => Ok(B57600),
-			115200 => Ok(B115200),
-			230400 => Ok(B230400),
-			x => Err(Error::new(ErrorKind::Other, format!("Unexpected baud rate returned: {}", x)))
-		})
+		self.conn.baud_rate().and_then(|baud_rate| BaudRate::from_u32(baud_rate).ok_or(
+			Error::new(ErrorKind::Other, format!("Unexpected baud rate returned: {}", baud_rate))
+		))
 	}
 
 	pub fn set_baud_rate(&mut self, baud_rate: BaudRate) -> io::Result<()> {
