@@ -23,6 +23,10 @@ There are minor variances between the builds for the different platforms.
 
 [Documentation for Unix-like](https://bryal.github.io/se-rs-ial/unix/se_rs_ial/)
 
+# Building
+
+se-rs-ial depends on serial-win, which makes use of unstable features. As such, Rust Nightly is needed to build the software.
+
 # Examples
 
 Check out the [examples](https://github.com/bryal/se-rs-ial/tree/master/examples) directory.
